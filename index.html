@@ -1,47 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Appointments</title>
+
+  <!-- Tailwind & libs -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.6/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Quick inline styles -->
   <style>
-    .modal {
-      display: block;
-      position: fixed;
-      z-index: 1050;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      overflow: auto;
-      background-color: rgba(0, 0, 0, 0.5);
-    }
-    .modal-dialog {
-      position: relative;
-      margin: 10% auto;
-      max-width: 500px;
-    }
-    .modal-content {
-      background-color: #fff;
-      padding: 20px;
-      border-radius: 5px;
-    }
-    .modal-content::-webkit-scrollbar {
-      width: 8px;
-    }
-    .modal-content::-webkit-scrollbar-thumb {
-      background-color: rgba(0, 0, 0, 0.2);
-      border-radius: 4px;
-    }
-    .hover-shadow:hover {
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-      transition: box-shadow 0.3s ease;
-    }
+    .modal { display:block; position:fixed; z-index:1050; left:0; top:0; width:100%; height:100%; overflow:auto; background:rgba(0,0,0,.5); }
+    .modal-dialog { margin:10% auto; max-width:500px; }
+    .modal-content { background:#fff; padding:20px; border-radius:5px; }
+    .modal-content::-webkit-scrollbar { width:8px; }
+    .modal-content::-webkit-scrollbar-thumb { background:rgba(0,0,0,.2); border-radius:4px; }
+    .hover-shadow:hover { box-shadow:0 4px 20px rgba(0,0,0,.2); transition:box-shadow .3s ease; }
   </style>
 </head>
 <body>
@@ -50,331 +28,212 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
+    // 🔗 Point straight at the GitHub-Pages JSON
+    const DATA_URL = 'https://infisparks.github.io/medzealbackup/data.json';
+
     const AppointmentsPage = () => {
       const [appointments, setAppointments] = useState([]);
-      const [selectedDate, setSelectedDate] = useState("");
-      const [selectedMonth, setSelectedMonth] = useState("");
-      const [selectedYear, setSelectedYear] = useState("");
-      const [searchTerm, setSearchTerm] = useState("");
+      const [selectedDate, setSelectedDate] = useState('');
+      const [selectedMonth, setSelectedMonth] = useState('');
+      const [selectedYear, setSelectedYear] = useState('');
+      const [searchTerm, setSearchTerm] = useState('');
       const [editingAppointment, setEditingAppointment] = useState(null);
 
       const currentYear = new Date().getFullYear();
 
+      /* ---------- Load JSON once ---------- */
       useEffect(() => {
-        fetch('/data.json') // Replace with your JSON file path ('data.json')
-          .then(response => response.json())
+        fetch(DATA_URL)
+          .then(res => res.json())
           .then(data => {
-            const attendedAppointments = Object.entries(data.appointments)
-              .flatMap(([key, appointmentGroup]) =>
-                Object.entries(appointmentGroup).map(([id, details]) => ({
-                  ...details,
-                  id,
-                  key,
+            const attended = Object.entries(data.appointments)
+              .flatMap(([key, group]) =>
+                Object.entries(group).map(([id, details]) => ({
+                  ...details, id, key
                 }))
               )
-              .filter(({ approved, attended }) => approved && attended);
-            setAppointments(attendedAppointments);
+              .filter(a => a.approved && a.attended);
+            setAppointments(attended);
           })
-          .catch(error => {
-            console.error('Error loading JSON:', error);
+          .catch(err => {
+            console.error('Error loading JSON:', err);
             setAppointments([]);
           });
       }, []);
 
+      /* ---------- Derived lists & totals ---------- */
       const filteredAppointments = useMemo(() => {
         if (!appointments) return [];
-
-        return appointments.filter(
-          ({ appointmentDate, doctor, message, name, phone }) => {
-            const isDateMatch = selectedDate ? appointmentDate === selectedDate : true;
-            const isMonthMatch = selectedMonth
-              ? appointmentDate.split("-")[1] === selectedMonth
-              : true;
-            const isYearMatch = selectedYear
-              ? appointmentDate.split("-")[0] === selectedYear
-              : true;
-            const isSearchMatch =
-              doctor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              phone.includes(searchTerm);
-
-            return isDateMatch && isMonthMatch && isYearMatch && isSearchMatch;
-          }
-        );
+        return appointments.filter(({ appointmentDate, doctor, message, name, phone }) => {
+          const [year, month] = appointmentDate.split('-');
+          const dateMatch   = selectedDate  ? appointmentDate === selectedDate : true;
+          const monthMatch  = selectedMonth ? month === selectedMonth          : true;
+          const yearMatch   = selectedYear  ? year  === selectedYear           : true;
+          const search = searchTerm.toLowerCase();
+          const textMatch  = doctor.toLowerCase().includes(search) ||
+                             message.toLowerCase().includes(search) ||
+                             name.toLowerCase().includes(search) ||
+                             phone.includes(search);
+          return dateMatch && monthMatch && yearMatch && textMatch;
+        });
       }, [appointments, selectedDate, selectedMonth, selectedYear, searchTerm]);
 
-      const totalPrice = useMemo(() => {
-        return filteredAppointments.reduce((acc, { price }) => {
-          const numericPrice = parseFloat(price);
-          if (isNaN(numericPrice) || numericPrice <= 0) {
-            return acc;
-          }
-          return acc + numericPrice;
-        }, 0);
-      }, [filteredAppointments]);
+      const totalPrice = useMemo(
+        () => filteredAppointments.reduce((sum, { price }) => {
+          const n = parseFloat(price);
+          return isNaN(n) || n <= 0 ? sum : sum + n;
+        }, 0),
+        [filteredAppointments]
+      );
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toISOString().split('T')[0];
 
+      /* ---------- Export ---------- */
       const handleExport = () => {
-        const worksheet = XLSX.utils.json_to_sheet(
-          filteredAppointments.map((appointment) => ({
-            Date: appointment.appointmentDate,
-            Time: appointment.appointmentTime,
-            Doctor: appointment.doctor,
-            Message: appointment.message,
-            Price: appointment.price,
-            Name: appointment.name,
-            Phone: appointment.phone,
-            SubCategory: appointment.subCategory,
-            Treatment: appointment.treatment,
+        const ws = XLSX.utils.json_to_sheet(
+          filteredAppointments.map(a => ({
+            Date      : a.appointmentDate,
+            Time      : a.appointmentTime,
+            Doctor    : a.doctor,
+            Message   : a.message,
+            Price     : a.price,
+            Name      : a.name,
+            Phone     : a.phone,
+            SubCategory: a.subCategory,
+            Treatment : a.treatment,
           }))
         );
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Appointments");
-        XLSX.writeFile(workbook, "appointments.xlsx");
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Appointments');
+        XLSX.writeFile(wb, 'appointments.xlsx');
       };
 
-      const handleEdit = (appointment) => {
-        setEditingAppointment(appointment);
-      };
+      /* ---------- Edit helpers ---------- */
+      const handleEdit  = appt => setEditingAppointment(appt);
+      const handleChange= e =>
+        setEditingAppointment(prev => ({ ...prev, [e.target.name]: e.target.value }));
+      const handleSave  = e => { e.preventDefault(); console.log('Updated:', editingAppointment); setEditingAppointment(null); };
 
-      const handleEditFormChange = (e) => {
-        const { name, value } = e.target;
-        setEditingAppointment((prevAppointment) => ({
-          ...prevAppointment,
-          [name]: value,
-        }));
-      };
-
-      const handleUpdateAppointment = (e) => {
-        e.preventDefault();
-        console.log("Updated appointment:", editingAppointment);
-        setEditingAppointment(null);
-      };
-
+      /* ---------- Render ---------- */
       return (
         <div className="container mx-auto mt-5 px-4">
           <h1 className="text-4xl text-center mb-4">Appointments</h1>
 
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Search by doctor, message, name, or phone"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full p-2 border rounded"
-            />
-          </div>
+          <input
+            className="w-full p-2 border rounded mb-4"
+            placeholder="Search by doctor, message, name, or phone"
+            value={searchTerm}
+            onChange={e=>setSearchTerm(e.target.value)}
+          />
 
-          <div className="mb-4 flex flex-wrap -mx-2">
+          <div className="flex flex-wrap -mx-2 mb-4">
+            {/* Date filter */}
             <div className="w-full md:w-1/3 px-2 mb-3">
               <label className="block mb-1">Select Date:</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full p-2 border rounded"
-              />
+              <input type="date" value={selectedDate}
+                     onChange={e=>setSelectedDate(e.target.value)}
+                     className="w-full p-2 border rounded"/>
             </div>
+            {/* Month filter */}
             <div className="w-full md:w-1/3 px-2 mb-3">
               <label className="block mb-1">Select Month:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
+              <select value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}
+                      className="w-full p-2 border rounded">
                 <option value="">All Months</option>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i} value={String(i + 1).padStart(2, "0")}>
-                    {new Date(0, i).toLocaleString("default", { month: "long" })}
+                {Array.from({length:12},(_,i)=>(
+                  <option key={i} value={String(i+1).padStart(2,'0')}>
+                    {new Date(0,i).toLocaleString('default',{month:'long'})}
                   </option>
                 ))}
               </select>
             </div>
+            {/* Year filter */}
             <div className="w-full md:w-1/3 px-2 mb-3">
               <label className="block mb-1">Select Year:</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full p-2 border rounded"
-              >
+              <select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)}
+                      className="w-full p-2 border rounded">
                 <option value="">All Years</option>
-                {Array.from({ length: 10 }, (_, i) => {
-                  const year = currentYear - i;
-                  return (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  );
-                })}
+                {Array.from({length:10},(_,i)=>currentYear-i).map(y=>
+                  <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>
 
-          <button
-            onClick={() => setSelectedDate(today)}
-            className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
-          >
-            Today Appointments
+          <button onClick={()=>setSelectedDate(today)}
+                  className="bg-blue-500 text-white px-4 py-2 rounded mb-4">
+            Today&nbsp;Appointments
           </button>
 
-          <button
-            onClick={handleExport}
-            className="bg-green-500 text-white px-4 py-2 rounded mb-4 float-right"
-          >
-            Export to Excel
+          <button onClick={handleExport}
+                  className="bg-green-500 text-white px-4 py-2 rounded mb-4 float-right">
+            Export&nbsp;to&nbsp;Excel
           </button>
 
           <h2 className="text-lg mb-2">Total Price: ₹{totalPrice.toFixed(2)}</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredAppointments.length > 0 ? (
-              filteredAppointments.map((appointment) => (
-                <div key={appointment.id} className="mb-4">
-                  <div className="border rounded shadow-sm hover-shadow p-4">
-                    <p><strong>Date:</strong> {appointment.appointmentDate}</p>
-                    <p><strong>Time:</strong> {appointment.appointmentTime}</p>
-                    <p><strong>Doctor:</strong> {appointment.doctor}</p>
-                    <p><strong>Message:</strong> {appointment.message}</p>
-                    <p><strong>Price:</strong> ₹{appointment.price}</p>
-                    <p><strong>Name:</strong> {appointment.name}</p>
-                    <p><strong>Phone:</strong> {appointment.phone}</p>
-                    <p><strong>SubCategory:</strong> {appointment.subCategory}</p>
-                    <p><strong>Treatment:</strong> {appointment.treatment}</p>
-                    <button
-                      onClick={() => handleEdit(appointment)}
-                      className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-2">
-                <p className="text-center text-gray-500">
-                  No appointments found for the selected criteria.
-                </p>
+            {filteredAppointments.length ? filteredAppointments.map(appt=>(
+              <div key={appt.id} className="border rounded shadow-sm hover-shadow p-4">
+                <p><strong>Date:</strong> {appt.appointmentDate}</p>
+                <p><strong>Time:</strong> {appt.appointmentTime}</p>
+                <p><strong>Doctor:</strong> {appt.doctor}</p>
+                <p><strong>Message:</strong> {appt.message}</p>
+                <p><strong>Price:</strong> ₹{appt.price}</p>
+                <p><strong>Name:</strong> {appt.name}</p>
+                <p><strong>Phone:</strong> {appt.phone}</p>
+                <p><strong>SubCategory:</strong> {appt.subCategory}</p>
+                <p><strong>Treatment:</strong> {appt.treatment}</p>
+                <button onClick={()=>handleEdit(appt)}
+                        className="bg-blue-500 text-white px-3 py-1 rounded">
+                  Edit
+                </button>
               </div>
+            )) : (
+              <p className="col-span-2 text-center text-gray-500">
+                No appointments found for the selected criteria.
+              </p>
             )}
           </div>
 
+          {/* ---------- Edit modal ---------- */}
           {editingAppointment && (
             <div className="modal">
               <div className="modal-dialog">
                 <div className="modal-content">
-                  <h2>Edit Appointment</h2>
-                  <form onSubmit={handleUpdateAppointment}>
-                    <div className="mb-3">
-                      <label className="block mb-1">Date:</label>
-                      <input
-                        type="date"
-                        name="appointmentDate"
-                        value={editingAppointment.appointmentDate}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Time:</label>
-                      <input
-                        type="time"
-                        name="appointmentTime"
-                        value={editingAppointment.appointmentTime}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Doctor:</label>
-                      <input
-                        type="text"
-                        name="doctor"
-                        value={editingAppointment.doctor}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Message:</label>
-                      <textarea
-                        name="message"
-                        value={editingAppointment.message}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      ></textarea>
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Price:</label>
-                      <input
-                        type="number"
-                        name="price"
-                        value={editingAppointment.price}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        min="0"
-                        step="0.01"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Name:</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={editingAppointment.name}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Phone:</label>
-                      <input
-                        type="text"
-                        name="phone"
-                        value={editingAppointment.phone}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">SubCategory:</label>
-                      <input
-                        type="text"
-                        name="subCategory"
-                        value={editingAppointment.subCategory}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="block mb-1">Treatment:</label>
-                      <input
-                        type="text"
-                        name="treatment"
-                        value={editingAppointment.treatment}
-                        onChange={handleEditFormChange}
-                        className="w-full p-2 border rounded"
-                        required
-                      />
-                    </div>
-                    <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded mr-2">
-                      Save Changes
+                  <h2 className="text-xl mb-4">Edit Appointment</h2>
+                  <form onSubmit={handleSave}>
+                    {[
+                      ['appointmentDate','date'],
+                      ['appointmentTime','time'],
+                      ['doctor','text'],
+                      ['message','textarea'],
+                      ['price','number'],
+                      ['name','text'],
+                      ['phone','text'],
+                      ['subCategory','text'],
+                      ['treatment','text'],
+                    ].map(([field,type])=>(
+                      <div key={field} className="mb-3">
+                        <label className="block mb-1 capitalize">{field.replace(/([A-Z])/g,' $1')}:</label>
+                        {type==='textarea' ? (
+                          <textarea name={field} required
+                                    value={editingAppointment[field]}
+                                    onChange={handleChange}
+                                    className="w-full p-2 border rounded"/>
+                        ) : (
+                          <input type={type} name={field} required
+                                 value={editingAppointment[field]}
+                                 onChange={handleChange}
+                                 className="w-full p-2 border rounded"/>
+                        )}
+                      </div>
+                    ))}
+                    <button type="submit"
+                            className="bg-blue-500 text-white px-4 py-2 rounded mr-2">
+                      Save&nbsp;Changes
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingAppointment(null)}
-                      className="bg-gray-500 text-white px-4 py-2 rounded"
-                    >
+                    <button type="button" onClick={()=>setEditingAppointment(null)}
+                            className="bg-gray-500 text-white px-4 py-2 rounded">
                       Cancel
                     </button>
                   </form>
@@ -386,7 +245,7 @@
       );
     };
 
-    ReactDOM.render(<AppointmentsPage />, document.getElementById('root'));
+    ReactDOM.render(<AppointmentsPage/>, document.getElementById('root'));
   </script>
 </body>
 </html>
