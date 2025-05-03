@@ -61,7 +61,7 @@
       const currentYear = new Date().getFullYear();
 
       useEffect(() => {
-        fetch('/public/data.json')
+        fetch('/data.json') // Replace with your JSON file path ('data.json')
           .then(response => response.json())
           .then(data => {
             const attendedAppointments = Object.entries(data.appointments)
